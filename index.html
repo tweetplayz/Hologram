@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Holographic Core: Stable UI</title>
+    <style>
+        /* --- CORE STYLES --- */
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', 'Roboto', sans-serif; user-select: none; }
+        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+        
+        /* --- HUD PANELS --- */
+        .hud-panel {
+            position: absolute; 
+            background: rgba(5, 12, 20, 0.95);
+            border: 2px solid #00d9ff; 
+            border-radius: 6px; 
+            padding: 2vmin; 
+            color: #fff; 
+            width: 22vw; 
+            min-width: 280px; 
+            backdrop-filter: blur(12px);
+            box-shadow: 0 0 25px rgba(0, 217, 255, 0.2);
+            font-family: 'Courier New', Courier, monospace;
+            pointer-events: auto;
+            transition: all 0.3s ease;
+        }
+
+        .hud-header {
+            color: #00d9ff; 
+            font-size: clamp(14px, 1.5vmin, 18px); 
+            font-weight: 900; 
+            letter-spacing: 3px; 
+            text-transform: uppercase;
+            margin-bottom: 12px; 
+            border-bottom: 2px solid #334455; 
+            padding-bottom: 8px;
+        }
+
+        /* PANELS POSITIONING */
+        #left-panel { top: 4vmin; left: 4vmin; border-left: 6px solid #00d9ff; border-right: none; }
+        #right-panel { top: 4vmin; right: 4vmin; text-align: right; border-right: 6px solid #00d9ff; border-left: none; }
+
+        /* TEXT SCALING */
+        .stat-row { 
+            display: flex; justify-content: space-between; margin-bottom: 1vmin; 
+            font-size: clamp(12px, 1.2vmin, 15px); 
+            align-items: center; 
+        }
+        .stat-val { font-weight: bold; color: #fff; font-size: clamp(14px, 1.5vmin, 20px); }
+        .active-shape { color: #00ff66; text-shadow: 0 0 10px #00ff66; transition: all 0.3s; }
+
+        /* MAPPING LIST & LOCK BAR */
+        .map-list { font-size: clamp(11px, 1.1vmin, 13px); color: #667788; margin-top: 15px; line-height: 1.6; border-top: 1px solid #333; padding-top: 8px;}
+        .map-item { display: flex; justify-content: space-between; }
+        .map-active { color: #fff; font-weight: bold; text-shadow: 0 0 5px white; }
+
+        #lock-container { margin-top: 20px; background: #223344; height: 1.5vmin; border-radius: 1vmin; overflow: hidden; position: relative; }
+        #lock-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #ff0055, #ffaa00); transition: width 0.1s linear, background 0.3s; }
+        #lock-text { position: absolute; width: 100%; text-align: center; font-size: clamp(9px, 1vmin, 12px); line-height: 1.5vmin; top: 0; color: #fff; font-weight: bold; text-shadow: 0 0 2px #000; letter-spacing: 1px; }
+
+        /* CONTROL BUTTONS (Bottom Left) */
+        .control-btn {
+            position: absolute; left: 4vmin; 
+            background: rgba(0, 20, 30, 0.9); border: 2px solid #00d9ff; color: #00d9ff; 
+            padding: 1.2vmin 2vmin; cursor: pointer; 
+            font-family: 'Courier New', monospace; font-weight: bold;
+            font-size: clamp(12px, 1.3vmin, 16px);
+            text-transform: uppercase; letter-spacing: 1px;
+            pointer-events: auto; transition: all 0.2s; z-index: 100; 
+            width: 18vw; min-width: 220px; text-align: center;
+        }
+        .control-btn:hover { background: rgba(0, 217, 255, 0.2); box-shadow: 0 0 15px rgba(0,217,255,0.3); }
+        
+        #settings-toggle { bottom: 4vmin; }
+        #pause-toggle { bottom: 10vmin; border-color: #ffaa00; color: #ffaa00; }
+        #pause-toggle:hover { background: rgba(255, 170, 0, 0.2); box-shadow: 0 0 15px rgba(255,170,0,0.3); }
+
+        /* SLIDERS */
+        #physics-controls { 
+            position: absolute; left: 4vmin; bottom: 17vmin; 
+            width: 18vw; min-width: 220px; z-index: 50; pointer-events: auto; 
+            display: flex; flex-direction: column; gap: 0.8vmin; 
+        }
+        .control-slider-box { background: rgba(5, 12, 20, 0.9); border: 1px solid #555; border-left: 4px solid #00d9ff; padding: 1vmin; border-radius: 0 4px 4px 0; }
+        .control-label { font-size: clamp(10px, 1.1vmin, 12px); color: #00d9ff; text-transform: uppercase; letter-spacing: 1px; display: flex; justify-content: space-between; margin-bottom: 4px; }
+        input[type=range] { width: 100%; accent-color: #ff0055; cursor: pointer; height: 6px; }
+        input[type=checkbox] { accent-color: #00d9ff; transform: scale(1.4); cursor: pointer; }
+
+        /* MODES MENU (MOVED TO TOP RIGHT) */
+        #modes-toggle { 
+            position: absolute; right: 4vmin; top: 25vmin; /* Moved to top right below HUD */
+            background: rgba(0, 20, 30, 0.9); border: 2px solid #ff00ff; color: #ff00ff; 
+            padding: 1.2vmin 2vmin; cursor: pointer; 
+            font-family: 'Courier New', monospace; font-weight: bold;
+            font-size: clamp(12px, 1.3vmin, 16px);
+            text-transform: uppercase; letter-spacing: 1px;
+            pointer-events: auto; transition: all 0.2s; z-index: 100; 
+            width: 18vw; min-width: 220px; text-align: center;
+        }
+        #modes-toggle:hover { background: rgba(255, 0, 255, 0.2); box-shadow: 0 0 15px rgba(255,0,255,0.3); }
+        
+        #modes-menu { 
+            position: absolute; right: 4vmin; top: 31vmin; /* Below Toggle */
+            width: 18vw; min-width: 220px; display: none; 
+            flex-direction: column; gap: 1vmin; z-index: 100;
+            border: 2px solid #ff00ff; border-right: 6px solid #ff00ff; border-left: 1px solid #ff00ff; 
+        }
+        .mode-btn { 
+            background: rgba(5, 10, 15, 0.95); 
+            color: #888; 
+            border: 1px solid #333; 
+            padding: 1vmin; 
+            cursor: pointer; text-align: right; 
+            font-family: 'Courier New', monospace; 
+            font-size: clamp(11px, 1.2vmin, 14px);
+            text-transform: uppercase; transition: all 0.2s; 
+        }
+        .mode-btn:hover { color: #fff; border-color: #666; }
+        .mode-btn.active { background: rgba(255, 0, 255, 0.2); color: #ff00ff; border-color: #ff00ff; font-weight: bold; }
+
+        /* SETTINGS MENU */
+        #settings-menu { 
+            position: absolute; bottom: 17vmin; left: 24vw; 
+            width: 20vw; min-width: 240px; display: none; 
+            flex-direction: column; gap: 1.2vmin; border-left: 6px solid #ff0055; 
+            z-index: 100;
+        }
+
+        /* WEBCAM & LOADING */
+        #cam-wrapper { 
+            position: absolute; bottom: 4vmin; right: 4vmin; 
+            width: 18vw; height: 13.5vw; min-width: 200px; min-height: 150px;
+            border: 2px solid #333; border-radius: 6px; background: #000; 
+            overflow: hidden; z-index: 20; transition: opacity 0.3s; 
+        }
+        video { position: absolute; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); opacity: 0.6; }
+        #skeleton-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: scaleX(-1); }
+
+        #loading { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 200; 
+            display: flex; flex-direction: column; justify-content: center; align-items: center; 
+            color: #00d9ff; font-size: 1.8rem; letter-spacing: 6px; 
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading">INITIALIZING SYSTEM...</div>
+
+    <div id="ui-layer">
+        <div id="left-panel" class="hud-panel">
+            <div class="hud-header" id="left-header">SELECTOR [LEFT]</div>
+            <div id="left-content"></div>
+        </div>
+
+        <div id="right-panel" class="hud-panel">
+            <div class="hud-header" id="right-header">MANIPULATOR [RIGHT]</div>
+            <div id="right-content"></div>
+        </div>
+
+        <div id="physics-controls">
+            <div class="control-slider-box" title="Double-click to Reset">
+                <div class="control-label"><span>Physics Intensity</span><span id="disp-gravity">1.0x</span></div>
+                <input type="range" id="slider-gravity" min="0" max="2" step="0.1" value="1.0" oninput="updatePhysicsSliders()" ondblclick="resetSlider('slider-gravity')">
+            </div>
+            <div class="control-slider-box" style="border-left-color: #ffaa00;" title="Double-click to Reset">
+                <div class="control-label" style="color:#ffaa00"><span>Time Scale</span><span id="disp-time">1.0x</span></div>
+                <input type="range" id="slider-time" min="0.1" max="2" step="0.1" value="1.0" oninput="updatePhysicsSliders()" ondblclick="resetSlider('slider-time')">
+            </div>
+        </div>
+
+        <button id="pause-toggle" class="control-btn" onclick="togglePause()">⏸ PAUSE SIMULATION</button>
+        <button id="settings-toggle" class="control-btn" onclick="toggleSettings()">⚙ SETTINGS</button>
+
+        <button id="modes-toggle" onclick="toggleModes()">≡ MODES</button>
+        <div id="modes-menu" class="hud-panel">
+            <button class="mode-btn active" id="btn-mode-hologram" onclick="setMode('HOLOGRAM')">01 // HOLOGRAM</button>
+            <button class="mode-btn" id="btn-mode-flow" onclick="setMode('FLOW')">02 // FLOW FIELD</button>
+            <button class="mode-btn" id="btn-mode-hands" onclick="setMode('HANDS')">03 // HANDS</button>
+            <button class="mode-btn" id="btn-mode-mimic" onclick="setMode('MIMIC')">04 // MIMIC</button>
+        </div>
+
+        <div id="settings-menu" class="hud-panel">
+            <div class="hud-header" style="color: #ff0055; border-color: #ff0055;">SYSTEM CONFIG</div>
+            
+            <div class="control-slider-box" style="background:none; border:none; padding:0;">
+                <div class="control-label" style="color:#ccc">FPS Monitor <span style="color:#fff"><span id="fps-render">0</span></span></div>
+            </div>
+            
+            <div class="control-slider-box" style="background:none; border:none; padding:0; margin-top:10px;">
+                <div class="control-label" style="color:#ccc">INVERT AXIS</div>
+                <div style="display:flex; justify-content:space-between; color:#ccc; font-size:12px; margin-top:5px;">
+                    <span style="display:flex; align-items:center; gap:5px;">X-AXIS: <input type="checkbox" id="set-inv-x" checked onchange="updateSettings()"></span>
+                    <span style="display:flex; align-items:center; gap:5px;">Y-AXIS: <input type="checkbox" id="set-inv-y" onchange="updateSettings()"></span>
+                </div>
+            </div>
+
+            <div class="control-slider-box" style="background:none; border:none; padding:0; margin-top:10px;">
+                <div class="control-label" style="color:#ccc">WEBCAM <input type="checkbox" id="set-cam" checked onchange="updateSettings()"></div>
+            </div>
+            
+            <div class="control-slider-box" style="background:none; border:none; padding:0; margin-top:10px;">
+                <div class="control-label" style="color:#ccc">PARTICLES <span id="val-part" style="color:#fff">14k</span></div>
+                <input type="range" id="set-part" min="5000" max="30000" step="1000" value="14000" onchange="updateParticles()">
+            </div>
+            
+            <div class="control-slider-box" style="background:none; border:none; padding:0; margin-top:10px;">
+                <div class="control-label" style="color:#ccc">HUE SHIFT <span id="val-hue" style="color:#fff">0</span></div>
+                <input type="range" id="set-hue" min="0" max="360" value="0" oninput="updateColor()">
+            </div>
+        </div>
+    </div>
+
+    <div id="cam-wrapper">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="skeleton-canvas"></canvas>
+    </div>
+
+    <div id="canvas-container"></div>
+    <canvas id="mimic-canvas" width="128" height="100" style="display:none;"></canvas>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+                "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
+
+        window.CONFIG = {
+            PARTICLES: 14000,
+            ROTATION_SPEED: 10.0,
+            LOCK_TIME_MS: 5000,
+            GRACE_MS: 3000,
+            HUE_OFFSET: 0,
+            FRICTION: 0.95,
+            EXPLOSION_FORCE: 3.5,
+            DRIFT_STRENGTH: 1.0,
+            TIME_SCALE: 1.0,
+            INVERT_X: true, 
+            INVERT_Y: false
+        };
+
+        const shapeList = ["Sphere", "Heart", "Saturn", "DNA Helix", "Cube", "Vortex"];
+
+        // --- STATE ---
+        let scene, camera, renderer, particles, geometry;
+        let handLandmarker, video, skeletonCtx;
+        let mimicCanvas, mimicCtx;
+        let isPaused = false;
+        let currentMode = 'HOLOGRAM'; 
+        let lastTime = 0;
+        let frameCount = 0;
+
+        let prevFrameData = null;
+        let motionBuffer = null; 
+
+        const state = {
+            shapeIdx: 0, scale: 1.0, rotX: 0, rotY: 0,
+            currentFingers: 0, lastFingers: -1,
+            holdStartTime: 0, isLocked: false, graceEndTime: 0 
+        };
+
+        let velocities = []; 
+        let handState = {
+            left: { isOpen: true, lastOpenTime: 0, pos: new THREE.Vector3() },
+            right: { isOpen: true, lastOpenTime: 0, pos: new THREE.Vector3() }
+        };
+        let rawLeftHand = null, rawRightHand = null;
+
+        window.onload = init;
+
+        async function init() {
+            mimicCanvas = document.getElementById('mimic-canvas');
+            mimicCtx = mimicCanvas.getContext('2d', { willReadFrequently: true });
+            
+            updateInstructionsUI(); 
+            setup3D();
+            await setupAI();
+            await setupCamera();
+            document.getElementById('loading').style.display = 'none';
+            animate(0);
+        }
+
+        // --- UI & LOGIC ---
+        window.updatePhysicsSliders = () => {
+            const grav = parseFloat(document.getElementById('slider-gravity').value);
+            const time = parseFloat(document.getElementById('slider-time').value);
+            window.CONFIG.DRIFT_STRENGTH = grav;
+            window.CONFIG.TIME_SCALE = time;
+            document.getElementById('disp-gravity').innerText = grav.toFixed(1) + 'x';
+            document.getElementById('disp-time').innerText = time.toFixed(1) + 'x';
+        };
+
+        window.resetSlider = (id) => {
+            document.getElementById(id).value = 1.0;
+            window.updatePhysicsSliders();
+        };
+
+        window.toggleModes = () => {
+            const menu = document.getElementById('modes-menu');
+            menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
+        };
+
+        window.setMode = (mode) => {
+            currentMode = mode;
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(`btn-mode-${mode.toLowerCase()}`).classList.add('active');
+
+            const pArray = geometry.attributes.position.array;
+            
+            if(mode === 'FLOW') {
+                for(let i=0; i<window.CONFIG.PARTICLES; i++) {
+                    const x = pArray[i*3]; const y = pArray[i*3+1]; const z = pArray[i*3+2];
+                    const len = Math.sqrt(x*x + y*y + z*z) + 0.001;
+                    velocities[i*3] = (x/len)*2.0; velocities[i*3+1] = (y/len)*2.0; velocities[i*3+2] = (z/len)*2.0;
+                }
+            } 
+            else if (mode === 'HOLOGRAM') { setShape(state.shapeIdx); velocities.fill(0); }
+            else if (mode === 'HANDS') { for(let i=0; i<window.CONFIG.PARTICLES*3; i++) velocities[i] = (Math.random()-0.5)*0.5; }
+            else if (mode === 'MIMIC') { 
+                const w = 128, h = 100;
+                if(!motionBuffer || motionBuffer.length !== w*h) {
+                    motionBuffer = new Float32Array(w*h).fill(0);
+                    prevFrameData = new Uint8Array(w*h).fill(0);
+                }
+            }
+            
+            state.scale = 1.0; state.rotX = 0; state.rotY = 0;
+            particles.rotation.set(0,0,0); particles.scale.set(1,1,1);
+            if(mode !== 'MIMIC') {
+                const c = geometry.attributes.color.array;
+                for(let i=0; i<c.length; i++) c[i] = 1; 
+                geometry.attributes.color.needsUpdate = true;
+            }
+            updateInstructionsUI(); toggleModes(); 
+        };
+
+        function updateInstructionsUI() {
+            const leftC = document.getElementById('left-content'); const rightC = document.getElementById('right-content');
+            const leftH = document.getElementById('left-header'); const rightH = document.getElementById('right-header');
+
+            if (currentMode === 'HOLOGRAM') {
+                leftH.innerText = "SELECTOR [LEFT]"; rightH.innerText = "MANIPULATOR [RIGHT]";
+                leftC.innerHTML = `<div class="stat-row"><span>FINGERS HELD:</span><span id="l-fingers" class="stat-val" style="font-size:1.5em;">0</span></div><div class="stat-row"><span>ACTIVE SHAPE:</span><span id="l-shape" class="stat-val active-shape">Sphere</span></div><div id="lock-container"><div id="lock-fill"></div><div id="lock-text">HOLD TO LOCK</div></div><div class="map-list" id="shape-map"></div>`;
+                const list = document.getElementById('shape-map'); shapeList.forEach((name, i) => { const div = document.createElement('div'); div.className = 'map-item'; div.id = `map-${i}`; div.innerHTML = `<span>${i} FINGER${i!==1?'S':''}</span> <span>${name}</span>`; list.appendChild(div); });
+                highlightShape(state.shapeIdx);
+                rightC.innerHTML = `<div class="stat-row"><span>ZOOM:</span><span id="r-zoom" class="stat-val">1.0x</span></div><div class="stat-row"><span>ROTATION:</span><span id="r-rot" class="stat-val">ACTIVE</span></div>`;
+            } else if (currentMode === 'FLOW') {
+                leftH.innerText = "GRAVITY WELL A"; rightH.innerText = "GRAVITY WELL B";
+                leftC.innerHTML = `<div class="stat-row"><span>MODE:</span><span id="l-flow-stat" class="stat-val" style="color:#00d9ff">STATIC CLOUD</span></div><div style="font-size:0.9em; color:#aaa; margin-top:10px;">• OPEN HAND: Repel<br>• FIST: Black Hole (Suck)<br>• SNAP: Explode</div>`;
+                rightC.innerHTML = `<div class="stat-row"><span>MODE:</span><span id="r-flow-stat" class="stat-val" style="color:#00d9ff">STATIC CLOUD</span></div><div style="font-size:0.9em; color:#aaa; margin-top:10px;">• OPEN HAND: Repel<br>• FIST: Black Hole (Suck)<br>• SNAP: Explode</div>`;
+            } else if (currentMode === 'HANDS') {
+                leftH.innerText = "DIGITAL TWIN [LEFT]"; rightH.innerText = "DIGITAL TWIN [RIGHT]";
+                leftC.innerHTML = `<div class="stat-row"><span>STATUS:</span><span id="l-hand-stat" class="stat-val" style="color:#ffaa00">SEARCHING...</span></div><div style="font-size:0.9em; color:#aaa; margin-top:10px;">Particles mimic volumetric hand shape.</div>`;
+                rightC.innerHTML = `<div class="stat-row"><span>STATUS:</span><span id="r-hand-stat" class="stat-val" style="color:#ffaa00">SEARCHING...</span></div><div style="font-size:0.9em; color:#aaa; margin-top:10px;">Particles mimic volumetric hand shape.</div>`;
+            } else if (currentMode === 'MIMIC') {
+                leftH.innerText = "KINETIC DEPTH ENGINE"; rightH.innerText = "ALGORITHM STATS";
+                leftC.innerHTML = `<div class="stat-row"><span>STATUS:</span><span class="stat-val" style="color:#00ff00">ONLINE</span></div><div style="font-size:0.9em; color:#aaa; margin-top:10px;"><b>Algorithm:</b> Frame Differencing + Temporal Decay.<br><b>Effect:</b> Stationary objects fade back. Moving objects (You) pop forward.</div>`;
+                rightC.innerHTML = `<div class="stat-row"><span>RESOLUTION:</span><span class="stat-val">128x100</span></div><div class="stat-row"><span>DEPTH SOURCE:</span><span class="stat-val" style="color:#00d9ff">MOTION</span></div>`;
+            }
+        }
+
+        function highlightShape(idx) {
+            if(currentMode !== 'HOLOGRAM') return;
+            for(let i=0; i<shapeList.length; i++) { const el = document.getElementById(`map-${i}`); if(el) el.className = 'map-item'; }
+            const active = document.getElementById(`map-${idx}`); if(active) active.className = 'map-item map-active';
+        }
+
+        window.togglePause = () => { isPaused = !isPaused; const btn = document.getElementById('pause-toggle'); if(isPaused) { btn.innerText = "▶ RESUME"; btn.style.color = "#00ff00"; btn.style.borderColor = "#00ff00"; } else { btn.innerText = "⏸ PAUSE"; btn.style.color = "#ffaa00"; btn.style.borderColor = "#ffaa00"; } };
+        window.toggleSettings = () => { const menu = document.getElementById('settings-menu'); menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex'; };
+        
+        window.updateSettings = () => { 
+            const showCam = document.getElementById('set-cam').checked; 
+            document.getElementById('cam-wrapper').style.opacity = showCam ? '1' : '0';
+            window.CONFIG.INVERT_X = document.getElementById('set-inv-x').checked;
+            window.CONFIG.INVERT_Y = document.getElementById('set-inv-y').checked;
+        };
+        
+        window.updateColor = () => { const hue = parseInt(document.getElementById('set-hue').value); window.CONFIG.HUE_OFFSET = hue; document.getElementById('val-hue').innerText = hue; if(currentMode === 'HOLOGRAM') setShape(state.shapeIdx); };
+        window.updateParticles = () => { const count = parseInt(document.getElementById('set-part').value); document.getElementById('val-part').innerText = (count/1000).toFixed(0) + 'k'; if(count !== window.CONFIG.PARTICLES) { window.CONFIG.PARTICLES = count; scene.remove(particles); geometry.dispose(); createParticleSystem(); } };
+
+        // --- 3D SETUP ---
+        function setup3D() {
+            scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0x000000, 0.02);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000); camera.position.z = 15;
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); renderer.setSize(window.innerWidth, window.innerHeight); renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+            createParticleSystem();
+        }
+
+        function createParticleSystem() {
+            geometry = new THREE.BufferGeometry();
+            const count = window.CONFIG.PARTICLES;
+            const pos = new Float32Array(count * 3); const col = new Float32Array(count * 3);
+            geometry.userData.target = new Float32Array(count * 3);
+            velocities = new Float32Array(count * 3);
+            for(let i=0; i<count*3; i++) { pos[i] = (Math.random()-0.5)*20; col[i] = 1.0; velocities[i] = 0; }
+            geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(col, 3));
+            const cvs = document.createElement('canvas'); cvs.width=32; cvs.height=32; const ctx = cvs.getContext('2d');
+            const g = ctx.createRadialGradient(16,16,0,16,16,16); g.addColorStop(0,'white'); g.addColorStop(1,'transparent'); ctx.fillStyle=g; ctx.fillRect(0,0,32,32);
+            const mat = new THREE.PointsMaterial({ size: 0.15, map: new THREE.CanvasTexture(cvs), vertexColors: true, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+            particles = new THREE.Points(geometry, mat); scene.add(particles); setShape(state.shapeIdx);
+        }
+
+        async function setupAI() { const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"); handLandmarker = await HandLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`, delegate: "GPU" }, runningMode: "VIDEO", numHands: 2, minHandDetectionConfidence: 0.6, minTrackingConfidence: 0.6 }); }
+        async function setupCamera() { video = document.getElementById('webcam'); const canvas = document.getElementById('skeleton-canvas'); skeletonCtx = canvas.getContext('2d'); const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } }); video.srcObject = stream; return new Promise(resolve => { video.onloadeddata = () => { video.play(); canvas.width = video.videoWidth; canvas.height = video.videoHeight; resolve(); } }); }
+
+        function countFingers(landmarks) {
+            const wrist = landmarks[0]; const tips = [4, 8, 12, 16, 20]; const knuckles = [2, 5, 9, 13, 17]; let count = 0;
+            const thumbTip = landmarks[4]; const pinkyKnuckle = landmarks[17]; const indexKnuckle = landmarks[5];
+            const palmWidth = Math.hypot(indexKnuckle.x - pinkyKnuckle.x, indexKnuckle.y - pinkyKnuckle.y);
+            const thumbSpan = Math.hypot(thumbTip.x - pinkyKnuckle.x, thumbTip.y - pinkyKnuckle.y);
+            if (thumbSpan > palmWidth * 1.15) count++;
+            for (let i = 1; i < 5; i++) { const tip = landmarks[tips[i]]; const knuckle = landmarks[knuckles[i]]; if (Math.hypot(tip.x - wrist.x, tip.y - wrist.y) > Math.hypot(knuckle.x - wrist.x, knuckle.y - wrist.y) * 1.4) count++; }
+            return count;
+        }
+        function isFist(fingers) { return fingers <= 1; }
+
+        function processHands(currentTime) {
+            if(!handLandmarker || !video) return [];
+            const results = handLandmarker.detectForVideo(video, currentTime);
+            skeletonCtx.clearRect(0, 0, skeletonCtx.canvas.width, skeletonCtx.canvas.height);
+            
+            // --- DRAW INVERTED DIVIDER LINE ---
+            const w = skeletonCtx.canvas.width; const h = skeletonCtx.canvas.height;
+            skeletonCtx.save();
+            skeletonCtx.globalCompositeOperation = 'difference'; 
+            skeletonCtx.strokeStyle = "white"; 
+            skeletonCtx.lineWidth = 3; 
+            skeletonCtx.beginPath(); 
+            skeletonCtx.setLineDash([15, 15]); 
+            skeletonCtx.moveTo(w/2, 0); 
+            skeletonCtx.lineTo(w/2, h); 
+            skeletonCtx.stroke(); 
+            skeletonCtx.restore();
+            
+            rawLeftHand = null; rawRightHand = null; const activeHands = [];
+            if (results.landmarks) {
+                for (const landmarks of results.landmarks) {
+                    drawSkeleton(landmarks);
+                    const cx = landmarks[9].x; const isLeft = cx > 0.5; 
+                    if (isLeft) rawLeftHand = landmarks; else rawRightHand = landmarks;
+                    const physX = (0.5 - cx) * 25; const physY = (0.5 - landmarks[9].y) * 15;
+                    const fingers = countFingers(landmarks);
+                    const hState = isLeft ? handState.left : handState.right;
+                    const wasFist = !hState.isOpen; const isNowFist = isFist(fingers);
+                    let triggerExplosion = false;
+                    if (wasFist && !isNowFist) { if (currentTime - hState.lastOpenTime > 500) { triggerExplosion = true; hState.lastOpenTime = currentTime; } }
+                    hState.isOpen = !isNowFist; hState.pos.set(physX, physY, 0);
+                    activeHands.push({ isLeft: isLeft, x: physX, y: physY, isFist: isNowFist, explode: triggerExplosion });
+                    if (currentMode === 'HOLOGRAM') processHologramHands(landmarks, isLeft, fingers, currentTime);
+                    else if (currentMode === 'FLOW') { const el = isLeft ? document.getElementById('l-flow-stat') : document.getElementById('r-flow-stat'); if(triggerExplosion) { el.innerText = "EXPLOSION!"; el.style.color = "#ff0000"; } else if (isNowFist) { el.innerText = "BLACK HOLE"; el.style.color = "#ffaa00"; } else { el.innerText = "REPULSION"; el.style.color = "#00d9ff"; } }
+                }
+            }
+            if(currentMode === 'HANDS') { const lStat = document.getElementById('l-hand-stat'); const rStat = document.getElementById('r-hand-stat'); if(rawLeftHand) { lStat.innerText = "CONNECTED"; lStat.style.color = "#00ff00"; } else { lStat.innerText = "SEARCHING..."; lStat.style.color = "#ffaa00"; } if(rawRightHand) { rStat.innerText = "CONNECTED"; rStat.style.color = "#00ff00"; } else { rStat.innerText = "SEARCHING..."; rStat.style.color = "#ffaa00"; } }
+            return activeHands;
+        }
+
+        function processHologramHands(landmarks, isLeft, fingers, now) {
+            if (isLeft) { 
+                if(isPaused) return;
+                document.getElementById('l-fingers').innerText = fingers;
+                if (now < state.graceEndTime) { const bar = document.getElementById('lock-fill'); bar.style.width = "100%"; bar.style.background = "#00ccff"; document.getElementById('lock-text').innerText = "SAFE TO REMOVE HAND"; return; }
+                if (fingers === state.lastFingers) {
+                    const heldTime = now - state.holdStartTime; const progress = Math.min(100, (heldTime / window.CONFIG.LOCK_TIME_MS) * 100); const bar = document.getElementById('lock-fill'); bar.style.width = `${progress}%`;
+                    if (heldTime >= window.CONFIG.LOCK_TIME_MS) { if (!state.isLocked) { state.isLocked = true; state.graceEndTime = now + window.CONFIG.GRACE_MS; } bar.style.background = "#00ff00"; document.getElementById('lock-text').innerText = "SYSTEM LOCKED"; document.getElementById('lock-text').style.color = "#000"; } 
+                    else { state.isLocked = false; bar.style.background = "linear-gradient(90deg, #ff0055, #ffaa00)"; document.getElementById('lock-text').innerText = "HOLD TO LOCK..."; document.getElementById('lock-text').style.color = "#fff"; }
+                } else { state.lastFingers = fingers; state.holdStartTime = now; state.isLocked = false; document.getElementById('lock-fill').style.width = "0%"; }
+                let shapeID = Math.min(fingers, shapeList.length - 1); if (shapeID !== state.shapeIdx) { state.shapeIdx = shapeID; setShape(shapeID); document.getElementById('l-shape').innerText = shapeList[shapeID]; highlightShape(shapeID); }
+            } else {
+                if(isPaused) return; 
+                const thumb = landmarks[4]; const index = landmarks[8]; 
+                const dist = Math.hypot(thumb.x - index.x, thumb.y - index.y); 
+                const norm = Math.max(0, Math.min(1, (dist - 0.03) / 0.15)); 
+                const targetScale = 0.5 + (norm * 2.5); 
+                state.scale += (targetScale - state.scale) * 0.1;
+                
+                // AXIS INVERSION LOGIC
+                const dirX = window.CONFIG.INVERT_X ? -1 : 1;
+                const dirY = window.CONFIG.INVERT_Y ? -1 : 1;
+                
+                state.rotX = (landmarks[9].y - 0.5) * window.CONFIG.ROTATION_SPEED * dirY; // Y controls X rotation usually, swapped for intuition if needed
+                state.rotY = (landmarks[9].x - 0.25) * window.CONFIG.ROTATION_SPEED * dirX;
+                
+                document.getElementById('r-zoom').innerText = state.scale.toFixed(1) + "x";
+            }
+        }
+
+        function drawSkeleton(landmarks) {
+            skeletonCtx.fillStyle = "#00ffcc";
+            for(let p of landmarks) {
+                skeletonCtx.beginPath();
+                skeletonCtx.arc(p.x * skeletonCtx.canvas.width, p.y * skeletonCtx.canvas.height, 4, 0, 2*Math.PI);
+                skeletonCtx.fill();
+            }
+        }
+
+        function shiftHue(r, g, b, degree) { const hsl = {}; const col = new THREE.Color(r, g, b); col.getHSL(hsl); hsl.h = (hsl.h + (degree / 360)) % 1; col.setHSL(hsl.h, hsl.s, hsl.l); return [col.r, col.g, col.b]; }
+        function setShape(idx) {
+            const count = window.CONFIG.PARTICLES; const t = geometry.userData.target; const c = geometry.attributes.color.array; const hueShiftVal = window.CONFIG.HUE_OFFSET;
+            for(let i=0; i<count; i++) {
+                let x,y,z, r,g,b; const phi = Math.acos(-1 + (2*i)/count); const theta = Math.sqrt(count*Math.PI)*phi; const i3 = i*3;
+                switch(idx) {
+                    case 0: const rad=5; x=rad*Math.cos(theta)*Math.sin(phi); y=rad*Math.sin(theta)*Math.sin(phi); z=rad*Math.cos(phi); r=0;g=1;b=1; break;
+                    case 1: const s=0.35; const u=phi*2; const v=theta; x=16*Math.sin(u)**3*Math.cos(v)*s; z=16*Math.sin(u)**3*Math.sin(v)*s; y=(13*Math.cos(u)-5*Math.cos(2*u)-2*Math.cos(3*u)-Math.cos(4*u))*s; r=1;g=0;b=0.4; break;
+                    case 2: if(i<count*0.6) { x=3.5*Math.cos(theta)*Math.sin(phi); y=3.5*Math.sin(theta)*Math.sin(phi); z=3.5*Math.cos(phi); r=1;g=0.7;b=0.2; } else { const a=Math.random()*6.28; const d=5+Math.random()*4; x=d*Math.cos(a); z=d*Math.sin(a); y=(Math.random()-0.5)*0.2; r=0.5;g=0.5;b=0.6; } break;
+                    case 3: const t=i*0.1; const hr=2.5; x=hr*Math.cos(t); z=hr*Math.sin(t); y=(i*0.015)-6; if(i%2==0) { x=hr*Math.cos(t+3.14); z=hr*Math.sin(t+3.14); r=0;g=1;b=0; } else { r=0;g=0;b=1; } break;
+                    case 4: const cs=7; x=(Math.random()-0.5)*cs; y=(Math.random()-0.5)*cs; z=(Math.random()-0.5)*cs; r=1;g=0;b=1; break;
+                    case 5: const vr=i*0.008; const va=i*0.1; x=vr*Math.cos(va); z=vr*Math.sin(va); y=(i*0.003)-6; r=0.5;g=0;b=1; break;
+                }
+                const shifted = shiftHue(r, g, b, hueShiftVal); t[i3]=x; t[i3+1]=y; t[i3+2]=z; c[i3]=shifted[0]; c[i3+1]=shifted[1]; c[i3+2]=shifted[2];
+            } geometry.attributes.color.needsUpdate = true;
+        }
+
+        // --- UPDATERS ---
+        function updateHologramPhysics(ts) {
+            const p = geometry.attributes.position.array; const t = geometry.userData.target; const moveSpeed = 0.08 * ts;
+            particles.rotation.y += (state.rotY - particles.rotation.y) * 0.1 * ts; particles.rotation.x += (state.rotX - particles.rotation.x) * 0.1 * ts;
+            const s = particles.scale.x + (state.scale - particles.scale.x)*0.1*ts; particles.scale.set(s,s,s);
+            for(let i=0; i<window.CONFIG.PARTICLES*3; i++) p[i] += (t[i] - p[i]) * moveSpeed;
+        }
+
+        function updateFlowPhysics(time, hands, ts) {
+            const p = geometry.attributes.position.array; const count = window.CONFIG.PARTICLES; const fr = window.CONFIG.FRICTION; const ds = window.CONFIG.DRIFT_STRENGTH;
+            for(let i=0; i<count; i++) {
+                const i3 = i*3; let x = p[i3], y = p[i3+1], z = p[i3+2], vx = velocities[i3], vy = velocities[i3+1], vz = velocities[i3+2];
+                vx *= fr; vy *= fr; vz *= fr; if(ds > 0) { vx += Math.sin(time*0.001 + y*0.1) * 0.002 * ds * ts; vy += Math.cos(time*0.001 + x*0.1) * 0.002 * ds * ts; }
+                for (const hand of hands) {
+                    const dx = x - hand.x, dy = y - hand.y, dz = z, distSq = dx*dx + dy*dy + dz*dz;
+                    if (hand.explode && distSq < 100) { const f = (100 - distSq) * 0.05 * window.CONFIG.EXPLOSION_FORCE * ts; vx += dx * f; vy += dy * f; vz += dz * f; }
+                    else if (hand.isFist && distSq < 200) { const f = 0.008 * ts; vx -= dx * f; vy -= dy * f; vz -= dz * f; }
+                    else if (!hand.isFist && distSq < 25) { const f = (25 - distSq) * 0.02 * ts; vx += dx * f; vy += dy * f; vz += dz * f; }
+                }
+                x += vx * ts; y += vy * ts; z += vz * ts; if (x > 25) x -= 50; if (x < -25) x += 50; if (y > 25) y -= 50; if (y < -25) y += 50; if (z > 25) z -= 50; if (z < -25) z += 50;
+                p[i3] = x; p[i3+1] = y; p[i3+2] = z; velocities[i3] = vx; velocities[i3+1] = vy; velocities[i3+2] = vz;
+            }
+        }
+
+        function updateHandsPhysics(ts) {
+            const p = geometry.attributes.position.array; const count = window.CONFIG.PARTICLES; const ds = window.CONFIG.DRIFT_STRENGTH; const ms = 0.2 * ts;
+            const hasL = !!rawLeftHand, hasR = !!rawRightHand; let startL = 0, endL = 0, startR = 0, endR = 0;
+            if (hasL && hasR) { endL = Math.floor(count / 2); startR = endL; endR = count; } else if (hasL) { endL = count; } else if (hasR) { startR = 0; endR = count; }
+            for(let i=0; i<count; i++) {
+                const i3 = i*3; let tx, ty, tz, active = false;
+                if (i >= startL && i < endL && hasL) { const lm = rawLeftHand[i % 21]; tx = (0.5 - lm.x) * 25 + (Math.random()-0.5)*1.5; ty = (0.5 - lm.y) * 15 + (Math.random()-0.5)*1.5; tz = -lm.z * 20 + (Math.random()-0.5)*1.5; active = true; } 
+                else if (i >= startR && i < endR && hasR) { const lm = rawRightHand[i % 21]; tx = (0.5 - lm.x) * 25 + (Math.random()-0.5)*1.5; ty = (0.5 - lm.y) * 15 + (Math.random()-0.5)*1.5; tz = -lm.z * 20 + (Math.random()-0.5)*1.5; active = true; }
+                if (!active) {
+                    let vx = velocities[i3], vy = velocities[i3+1], vz = velocities[i3+2]; if(ds > 0) { vx += (Math.random()-0.5)*0.01 * ds; vy += (Math.random()-0.5)*0.01 * ds; vz += (Math.random()-0.5)*0.01 * ds; }
+                    vx *= 0.95; vy *= 0.95; vz *= 0.95; p[i3] += vx * ts; p[i3+1] += vy * ts; p[i3+2] += vz * ts; velocities[i3] = vx; velocities[i3+1] = vy; velocities[i3+2] = vz;
+                } else { p[i3] += (tx - p[i3]) * ms; p[i3+1] += (ty - p[i3+1]) * ms; p[i3+2] += (tz - p[i3+2]) * ms; }
+            }
+        }
+
+        function updateMimicPhysics(ts) {
+            if(!video || video.readyState < 2) return;
+            const w = 128, h = 100;
+            mimicCtx.drawImage(video, 0, 0, w, h);
+            const frame = mimicCtx.getImageData(0, 0, w, h);
+            const data = frame.data;
+            
+            if (!motionBuffer || motionBuffer.length !== w * h) {
+                motionBuffer = new Float32Array(w * h).fill(0);
+                prevFrameData = new Uint8Array(w * h).fill(0);
+            }
+
+            const p = geometry.attributes.position.array;
+            const c = geometry.attributes.color.array;
+            const count = window.CONFIG.PARTICLES;
+            const totalPixels = w * h;
+            
+            for(let i=0; i<count; i++) {
+                
+                const mapIdx = i % totalPixels;
+                const col = mapIdx % w;
+                const row = Math.floor(mapIdx / w);
+                const pixIdx = mapIdx << 2;
+                
+                const r = data[pixIdx];
+                const g = data[pixIdx+1];
+                const b = data[pixIdx+2];
+                const grey = (r+g+b)/3;
+
+                let motion = motionBuffer[mapIdx];
+                if (i < totalPixels) {
+                    const prevGrey = prevFrameData[mapIdx];
+                    const diff = Math.abs(grey - prevGrey);
+                    if (diff > 15) { motion += 0.2; if (motion > 1.0) motion = 1.0; } else { motion *= 0.95; }
+                    motionBuffer[mapIdx] = motion;
+                    prevFrameData[mapIdx] = grey;
+                }
+
+                const depthLuma = (grey / 255) * 2; 
+                const depthMotion = motion * 8; 
+                const tz = depthMotion + depthLuma - 5; 
+
+                const tx = (0.5 - (col / w)) * 25; 
+                const ty = (0.5 - (row / h)) * 15;
+                const noise = (i >= totalPixels) ? (Math.random()-0.5)*0.5 : 0;
+
+                const i3 = i * 3;
+                p[i3] += (tx - p[i3]) * 0.2 * ts + noise;
+                p[i3+1] += (ty - p[i3+1]) * 0.2 * ts + noise;
+                p[i3+2] += (tz - p[i3+2]) * 0.2 * ts + noise;
+                c[i3] = r / 255; c[i3+1] = g / 255; c[i3+2] = b / 255;
+            }
+            geometry.attributes.color.needsUpdate = true;
+        }
+
+        function animate(time) {
+            requestAnimationFrame(animate);
+            frameCount++;
+            if (time - lastTime >= 1000) { document.getElementById('fps-render').innerText = frameCount; frameCount = 0; lastTime = time; }
+            const hands = processHands(time);
+            const ts = window.CONFIG.TIME_SCALE;
+            if (!isPaused) {
+                if (currentMode === 'HOLOGRAM') updateHologramPhysics(ts);
+                else if (currentMode === 'FLOW') updateFlowPhysics(time, hands, ts);
+                else if (currentMode === 'HANDS') updateHandsPhysics(ts);
+                else if (currentMode === 'MIMIC') updateMimicPhysics(ts);
+                geometry.attributes.position.needsUpdate = true;
+            }
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
